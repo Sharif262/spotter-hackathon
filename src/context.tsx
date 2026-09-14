@@ -12,15 +12,13 @@ import { dark, light, type Theme, type ThemeName } from './theme';
 import type { EquipmentKind } from './cv/exercises';
 import type { ScreenId, TabId } from './types';
 
-const TABS: TabId[] = ['home', 'sessions', 'learn', 'you'];
+const TABS: TabId[] = ['home', 'sessions', 'you'];
 const THEME_KEY = 'spotter-theme';
 
 type AppContextValue = {
   screen: ScreenId;
   themeName: ThemeName;
   colors: Theme;
-  metric: boolean;
-  audioOn: boolean;
   curLift: string;
   curW: string;
   equipment: EquipmentKind;
@@ -30,8 +28,6 @@ type AppContextValue = {
   tab: (id: TabId) => void;
   setLift: (lift: string, w: string, equipment?: EquipmentKind) => void;
   toggleTheme: () => void;
-  toggleUnits: () => void;
-  toggleAudio: () => void;
   showToast: (msg: string) => void;
   setLastSessionId: (id: number | null) => void;
   haptic: () => void;
@@ -42,8 +38,6 @@ const AppContext = createContext<AppContextValue | null>(null);
 export function AppProvider({ children }: { children: React.ReactNode }) {
   const [screen, setScreen] = useState<ScreenId>('home');
   const [themeName, setThemeName] = useState<ThemeName>('light');
-  const [metric, setMetric] = useState(true);
-  const [audioOn, setAudioOn] = useState(true);
   const [curLift, setCurLift] = useState('Bicep curl');
   const [curW, setCurW] = useState('12 kg');
   const [equipment, setEquipment] = useState<EquipmentKind>('db');
@@ -97,24 +91,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     });
   }, [haptic]);
 
-  const toggleUnits = useCallback(() => {
-    haptic();
-    setMetric((m) => {
-      const next = !m;
-      showToast(next ? 'Switched to metric' : 'Switched to imperial');
-      return next;
-    });
-  }, [haptic, showToast]);
-
-  const toggleAudio = useCallback(() => {
-    haptic();
-    setAudioOn((on) => {
-      const next = !on;
-      showToast(next ? 'Rep audio on' : 'Rep audio muted');
-      return next;
-    });
-  }, [haptic, showToast]);
-
   const colors = themeName === 'dark' ? dark : light;
 
   const value = useMemo(
@@ -122,8 +98,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       screen,
       themeName,
       colors,
-      metric,
-      audioOn,
       curLift,
       curW,
       equipment,
@@ -133,15 +107,13 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       tab,
       setLift,
       toggleTheme,
-      toggleUnits,
-      toggleAudio,
       showToast,
       setLastSessionId,
       haptic,
     }),
     [
-      screen, themeName, colors, metric, audioOn, curLift, curW, equipment, lastSessionId, toast,
-      go, tab, setLift, toggleTheme, toggleUnits, toggleAudio, showToast, haptic,
+      screen, themeName, colors, curLift, curW, equipment, lastSessionId, toast,
+      go, tab, setLift, toggleTheme, showToast, haptic,
     ],
   );
 

@@ -35,8 +35,10 @@ export function useLiveTracker(lift: string, equipment: EquipmentKind, active: b
       writesRef.current.push(p.catch(() => {}));
     };
     if (sampleN.current % 3 === 0) track(store.logSample(id, snap.sample));
-    for (const f of snap.newFaults) track(store.logFault(id, snap.t, snap.leftState, snap.reps, f));
-    if (snap.newRep) track(store.logRep(id, snap.t, snap.reps, snap.leftAngle, snap.rightAngle));
+    for (const f of snap.newFaults) track(store.logFault(id, snap.t, snap.leftState, snap.faultRep, f));
+    for (const n of snap.committedNs) {
+      track(store.logRep(id, snap.t, n, snap.leftAngle, snap.rightAngle));
+    }
   }, []);
 
   useEffect(() => {

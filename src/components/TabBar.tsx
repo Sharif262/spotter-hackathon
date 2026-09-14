@@ -2,14 +2,14 @@ import React from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { isTabScreen, useApp } from '../context';
-import { CameraIco, Learn, List, Person } from './Icons';
+import { CameraIco, List, Person } from './Icons';
 
 export function TabBar() {
   const { screen, tab, go, colors } = useApp();
   const insets = useSafeAreaInsets();
   if (!isTabScreen(screen)) return null;
 
-  const item = (id: 'home' | 'sessions' | 'learn' | 'you', label: string, Icon: typeof CameraIco) => {
+  const item = (id: 'home' | 'sessions' | 'you', label: string, Icon: typeof CameraIco) => {
     const on = screen === id;
     const color = on ? colors.accent : colors.muted;
     return (
@@ -37,7 +37,6 @@ export function TabBar() {
       <Pressable onPress={() => go('pick')} style={[styles.recb, { backgroundColor: colors.accent, borderColor: colors.bg }]} accessibilityLabel="New set">
         <View style={styles.in} />
       </Pressable>
-      {item('learn', 'Learn', Learn)}
       {item('you', 'You', Person)}
     </View>
   );

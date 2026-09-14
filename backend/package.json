@@ -1,0 +1,11 @@
+{
+  "name": "spotter-backend",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "node src/index.mjs"
+  },
+  "dependencies": {
+    "@google/genai": "^1.52.0"
+  }
+}

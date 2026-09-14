@@ -1,30 +1,38 @@
 import React, { useEffect, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Circle, Path } from 'react-native-svg';
 import { EMPTY_REPORT, loadCoach, type CoachReport } from '../ai/coach';
 import { useApp } from '../context';
-import { ArrowRight, Bolt, Bulb, Check, Share } from '../components/Icons';
+import { ArrowRight, Bolt, Bulb, Check } from '../components/Icons';
 import { Lbl, NavBar, PrimaryButton } from '../components/Ui';
 
 export function ResultScreen() {
-  const { colors, go, curLift, curW, lastSessionId, showToast } = useApp();
+  const { colors, go, curLift, curW, lastSessionId } = useApp();
   const insets = useSafeAreaInsets();
   const [report, setReport] = useState<CoachReport>(EMPTY_REPORT);
   const [rep, setRep] = useState(1);
+  const [coaching, setCoaching] = useState(false);
 
   useEffect(() => {
     let live = true;
     if (lastSessionId == null) {
       setReport(EMPTY_REPORT);
+      setCoaching(false);
       return;
     }
-    loadCoach(lastSessionId).then((r) => {
+    setCoaching(true);
+    loadCoach(lastSessionId, (local) => {
+      if (!live) return;
+      setReport(local);
+      setRep(local.byRep.find((x) => x.flag)?.n ?? local.byRep[0]?.n ?? 1);
+    }).then((r) => {
       if (!live) return;
       setReport(r);
       setRep(r.byRep.find((x) => x.flag)?.n ?? r.byRep[0]?.n ?? 1);
+      setCoaching(false);
     }).catch(() => {
-      if (live) setReport(EMPTY_REPORT);
+      if (live) setCoaching(false);
     });
     return () => { live = false; };
   }, [lastSessionId]);
@@ -36,16 +44,8 @@ export function ResultScreen() {
     <View style={{ flex: 1, backgroundColor: colors.bg }}>
       <NavBar
         title={`${curLift} · live set`}
-        subtitle={`${curW} · ${report.reps} reps · ${report.faultCount} faults`}
+        subtitle={coaching ? 'Gemini is reading your log…' : `${curW} · ${report.reps} reps · ${report.source === 'gemini' ? 'Gemini' : 'local'} coach`}
         onBack={() => go('home')}
-        right={
-          <Pressable
-            onPress={() => showToast('Saved locally · SQLite + CSV')}
-            style={[styles.bk, { backgroundColor: colors.card, borderColor: colors.hair }]}
-          >
-            <Share color={colors.ink} />
-          </Pressable>
-        }
       />
       <ScrollView contentContainerStyle={{ paddingHorizontal: 20, paddingBottom: 20 }} showsVerticalScrollIndicator={false}>
         <View style={[styles.replay, { borderColor: colors.hair }]}>
@@ -99,26 +99,58 @@ export function ResultScreen() {
         <Pressable onPress={() => go('fix')} style={[styles.diag, { borderColor: colors.accent, backgroundColor: colors.card }]}>
           <View style={[styles.dh, { backgroundColor: colors.tint }]}>
             <View style={[styles.di, { backgroundColor: colors.accent }]}><Bulb size={14} /></View>
-            <Text style={[styles.dn, { color: colors.accent }]}>Spotter diagnosis</Text>
+            <Text style={[styles.dn, { color: colors.accent }]}>
+              {coaching ? 'Gemini coaching' : report.source === 'gemini' ? 'Gemini diagnosis' : 'Spotter diagnosis'}
+            </Text>
+            {coaching ? <ActivityIndicator color={colors.accent} style={{ marginLeft: 'auto' }} /> : null}
           </View>
           <View style={{ padding: 15 }}>
-            <View style={[styles.win, { backgroundColor: colors.card2, borderColor: colors.hair }]}>
-              <View style={[styles.wi, { backgroundColor: colors.accent }]}><Check size={11} /></View>
-              <Text style={[styles.wt, { color: colors.ink2 }]}>
-                <Text style={{ fontWeight: '700', color: colors.ink }}>Went well: </Text>
-                {report.wentWell}
+            {report.functioning.length ? (
+              <>
+                <Text style={[styles.sk, { color: colors.muted }]}>What’s working</Text>
+                {report.functioning.map((item) => (
+                  <View key={item.area} style={[styles.win, { backgroundColor: colors.card2, borderColor: colors.hair }]}>
+                    <View style={[styles.wi, { backgroundColor: colors.accent }]}><Check size={11} /></View>
+                    <Text style={[styles.wt, { color: colors.ink2 }]}>
+                      <Text style={{ fontWeight: '700', color: colors.ink }}>{item.area}: </Text>
+                      {item.detail}
+                    </Text>
+                  </View>
+                ))}
+              </>
+            ) : (
+              <View style={[styles.win, { backgroundColor: colors.card2, borderColor: colors.hair }]}>
+                <View style={[styles.wi, { backgroundColor: colors.accent }]}><Check size={11} /></View>
+                <Text style={[styles.wt, { color: colors.ink2 }]}>
+                  <Text style={{ fontWeight: '700', color: colors.ink }}>Went well: </Text>
+                  {report.wentWell}
+                </Text>
+              </View>
+            )}
+
+            <Text style={[styles.sk, { color: colors.muted }]}>Where you went wrong</Text>
+            {report.wentWrong.length ? report.wentWrong.map((w) => (
+              <Text key={w.where} style={[styles.sv, { color: colors.ink2, marginBottom: 8 }]}>
+                <Text style={{ fontWeight: '700', color: colors.ink }}>{w.where}</Text>
+                {w.reps && w.reps !== 'none' ? ` · reps ${w.reps}` : ''}{'\n'}{w.detail}
               </Text>
-            </View>
-            <Text style={[styles.sk, { color: colors.muted }]}>Diagnosis</Text>
-            <Text style={[styles.sv, { color: colors.ink2 }]}>{report.diagnosis}</Text>
-            <Text style={[styles.sk, { color: colors.muted, marginTop: 14 }]}>Why it happened</Text>
-            <Text style={[styles.sv, { color: colors.ink2 }]}>{report.why}</Text>
-            <Text style={[styles.sk, { color: colors.muted, marginTop: 14 }]}>Cue for the next set</Text>
-            <View style={[styles.cue, { backgroundColor: colors.tint }]}>
-              <Bolt size={16} color={colors.accent} />
-              <Text style={[styles.ct, { color: colors.ink }]}>{report.cue}</Text>
-            </View>
-            <Text style={[styles.sk, { color: colors.muted, marginTop: 14 }]}>Muscle load</Text>
+            )) : (
+              <Text style={[styles.sv, { color: colors.ink2 }]}>{report.diagnosis}</Text>
+            )}
+
+            <Text style={[styles.sk, { color: colors.muted, marginTop: 14 }]}>What to improve</Text>
+            {(report.improvements.length ? report.improvements : [{ area: 'Cue', detail: report.why, cue: report.cue }]).map((item) => (
+              <View key={item.area} style={[styles.cue, { backgroundColor: colors.tint, marginBottom: 8 }]}>
+                <Bolt size={16} color={colors.accent} />
+                <Text style={[styles.ct, { color: colors.ink }]}>
+                  {item.cue}
+                  {'\n'}
+                  <Text style={{ fontWeight: '500', color: colors.ink2 }}>{item.detail}</Text>
+                </Text>
+              </View>
+            ))}
+
+            <Text style={[styles.sk, { color: colors.muted, marginTop: 6 }]}>Muscle load</Text>
             <View style={styles.mus}>
               {report.muscles.map((m) => (
                 <View key={m.label} style={[styles.mc, { backgroundColor: m.hot ? colors.amberBg : colors.hair2 }]}>
@@ -151,7 +183,6 @@ function Tmc({ k, v, unit, tone, colors }: { k: string; v: string; unit: string;
 }
 
 const styles = StyleSheet.create({
-  bk: { width: 38, height: 38, borderRadius: 12, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
   replay: { height: 210, borderRadius: 16, overflow: 'hidden', backgroundColor: '#12171A', borderWidth: 1, marginTop: 8, justifyContent: 'flex-end' },
   rpTag: { position: 'absolute', left: 11, top: 11, zIndex: 3, fontSize: 9, fontWeight: '700', letterSpacing: 0.7, textTransform: 'uppercase', color: 'rgba(255,255,255,0.62)', backgroundColor: 'rgba(10,12,13,0.6)', paddingHorizontal: 9, paddingVertical: 5, borderRadius: 6, overflow: 'hidden' },
   rpFig: { position: 'absolute', left: '32%', bottom: '18%' },

@@ -24,8 +24,10 @@ export type TrackerSnapshot = {
   liveFault: FaultEvent | null;
   barUneven: boolean;
   newRep: boolean;
+  committedNs: number[];
   newFaults: FaultEvent[];
   sample: SampleRow;
+  faultRep: number;
 };
 
 export class KinematicEngine {
@@ -67,13 +69,13 @@ export class KinematicEngine {
     const lAng = this.lFilter.next(lRaw);
     const rAng = this.rFilter.next(rRaw);
 
-    let newRep = false;
+    const committedNs: number[] = [];
     if (this.equipment === 'db') {
-      if (this.left.step(lAng) === 'rep') { this.reps += 1; newRep = true; }
-      if (this.right.step(rAng) === 'rep') { this.reps += 1; newRep = true; }
+      if (this.left.step(lAng) === 'rep') { this.reps += 1; committedNs.push(this.reps); }
+      if (this.right.step(rAng) === 'rep') { this.reps += 1; committedNs.push(this.reps); }
     } else {
       const mid = (lAng + rAng) / 2;
-      if (this.left.step(mid) === 'rep') { this.reps += 1; newRep = true; }
+      if (this.left.step(mid) === 'rep') { this.reps += 1; committedNs.push(this.reps); }
       this.right.step(mid);
     }
 
@@ -112,6 +114,7 @@ export class KinematicEngine {
     }
 
     const live = newFaults[0] ?? null;
+    const inFlight = moving ? this.reps + 1 : this.reps;
     const sample: SampleRow = {
       t,
       exercise: this.exercise,
@@ -120,7 +123,7 @@ export class KinematicEngine {
       elbowDeg: Math.round(((lAng + rAng) / 2) * 10) / 10,
       faultCode: live?.code ?? '',
       cue: live?.cue ?? '',
-      rep: this.reps,
+      rep: inFlight,
     };
 
     return {
@@ -133,9 +136,11 @@ export class KinematicEngine {
       liveCue: live?.cue ?? null,
       liveFault: live,
       barUneven: this.equipment === 'bb' && Math.abs(lAng - rAng) > 15,
-      newRep,
+      newRep: committedNs.length > 0,
+      committedNs,
       newFaults,
       sample,
+      faultRep: inFlight,
     };
   }
 }

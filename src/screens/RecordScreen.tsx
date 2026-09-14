@@ -1,6 +1,6 @@
 import { useKeepAwake } from 'expo-keep-awake';
 import { LinearGradient } from 'expo-linear-gradient';
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Circle, Line } from 'react-native-svg';
@@ -15,33 +15,50 @@ export function RecordScreen() {
   const [phase, setPhase] = useState<'cd' | 'live'>('cd');
   const [count, setCount] = useState(3);
   const { hud, stop } = useLiveTracker(curLift, equipment, phase === 'live');
+  const finishing = useRef(false);
 
   useEffect(() => {
     setPhase('cd');
     setCount(3);
     haptic();
     let k = 3;
+    let goTimer: ReturnType<typeof setTimeout> | null = null;
     const id = setInterval(() => {
       k -= 1;
       if (k <= 0) {
         clearInterval(id);
         setCount(0);
         haptic();
-        setTimeout(() => setPhase('live'), 400);
+        goTimer = setTimeout(() => setPhase('live'), 400);
       } else {
         setCount(k);
         haptic();
       }
     }, 900);
-    return () => clearInterval(id);
+    return () => {
+      clearInterval(id);
+      if (goTimer) clearTimeout(goTimer);
+    };
   }, [haptic]);
 
   const finish = useCallback(async () => {
+    if (finishing.current) return;
+    finishing.current = true;
     haptic();
     const id = await stop();
+    if (id == null) {
+      finishing.current = false;
+      go('home');
+      return;
+    }
     setLastSessionId(id);
     go('result');
   }, [go, haptic, setLastSessionId, stop]);
+
+  const cancel = useCallback(() => {
+    if (finishing.current) return;
+    go('home');
+  }, [go]);
 
   const mm = String(Math.floor(hud.secs / 60)).padStart(2, '0');
   const ss = String(hud.secs % 60).padStart(2, '0');
@@ -92,11 +109,14 @@ export function RecordScreen() {
         <View style={styles.cd}>
           <Text style={styles.cdn}>{count <= 0 ? 'GO' : count}</Text>
           <Text style={styles.cdlbl}>{count <= 0 ? 'Track live' : 'Find the start position'}</Text>
+          <Pressable onPress={cancel} style={styles.cancel}>
+            <Text style={styles.cancelTx}>Cancel</Text>
+          </Pressable>
         </View>
       ) : null}
 
       <LinearGradient colors={['transparent', 'rgba(6,8,9,0.9)']} style={[styles.dock, { paddingBottom: insets.bottom + 22 }]}>
-        <Pressable onPress={finish} style={styles.danger}>
+        <Pressable onPress={finish} disabled={phase !== 'live'} style={[styles.danger, phase !== 'live' && { opacity: 0.45 }]}>
           <Text style={styles.dangerTx}>Finish set</Text>
         </Pressable>
       </LinearGradient>
@@ -124,6 +144,8 @@ const styles = StyleSheet.create({
   cd: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(6,8,9,0.62)', alignItems: 'center', justifyContent: 'center', zIndex: 10 },
   cdn: { fontSize: 86, fontWeight: '700', color: '#fff' },
   cdlbl: { marginTop: 8, fontSize: 11, fontWeight: '700', letterSpacing: 0.7, color: 'rgba(255,255,255,0.6)', textTransform: 'uppercase' },
+  cancel: { marginTop: 28, paddingHorizontal: 18, paddingVertical: 10 },
+  cancelTx: { color: 'rgba(255,255,255,0.75)', fontSize: 14, fontWeight: '600' },
   dock: { position: 'absolute', left: 0, right: 0, bottom: 0, paddingHorizontal: 20, paddingTop: 20 },
   danger: { height: 52, borderRadius: 15, backgroundColor: '#EF4444', alignItems: 'center', justifyContent: 'center' },
   dangerTx: { color: '#fff', fontSize: 16, fontWeight: '700' },

@@ -62,13 +62,3 @@ export function SkeletonRig({
     </Svg>
   );
 }
-
-export function PathThumb({ d, size = 52 }: { d: string; size?: number }) {
-  return (
-    <Svg viewBox="0 0 60 64" width={size} height={size * (64 / 60)} fill="none">
-      <Path d={d} stroke="#22D3EE" strokeWidth={1.4} fill="none" opacity={0.22} />
-      <Path d={d} stroke="#22D3EE" strokeWidth={2.4} strokeLinecap="round" fill="none" />
-      <Circle cx="30" cy="12" r="4" fill="#22D3EE" />
-    </Svg>
-  );
-}

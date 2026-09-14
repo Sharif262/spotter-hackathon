@@ -1,18 +1,30 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { USER_NAME } from '../data';
 import { useApp } from '../context';
 import { H1, Meta } from '../components/Ui';
-import { Info, Ruler, Shield, Sun } from '../components/Icons';
+import { Info, Shield, Sun } from '../components/Icons';
+import { recentSessions } from '../storage/workoutStore';
 
 export function YouScreen() {
-  const { colors, themeName, metric, toggleTheme, toggleUnits, showToast } = useApp();
+  const { colors, themeName, toggleTheme, showToast } = useApp();
   const insets = useSafeAreaInsets();
+  const [stats, setStats] = useState({ sets: 0, reps: 0, faults: 0 });
+
+  useEffect(() => {
+    recentSessions(100).then((rows) => {
+      setStats({
+        sets: rows.length,
+        reps: rows.reduce((s, r) => s + r.reps, 0),
+        faults: rows.reduce((s, r) => s + (r.faultCount ?? 0), 0),
+      });
+    }).catch(() => {});
+  }, []);
+
   const rows = [
     { icon: <Sun color={colors.ink2} />, t: 'Appearance', v: themeName === 'dark' ? 'Dark' : 'Light', on: toggleTheme },
-    { icon: <Ruler color={colors.ink2} />, t: 'Units', v: metric ? 'Metric (cm / kg)' : 'Imperial (in / lb)', on: toggleUnits },
-    { icon: <Shield color={colors.ink2} />, t: 'Privacy', v: 'On device', on: () => showToast('Pose logs stay in SQLite + CSV on this phone') },
+    { icon: <Shield color={colors.ink2} />, t: 'Privacy', v: 'On device + Gemini', on: () => showToast('Pose stays on phone. The coach log is sent to your local Gemini backend.') },
     { icon: <Info color={colors.ink2} />, t: 'About', v: '1.0', on: () => showToast('Spotter 1.0 · AI Builders Hackathon') },
   ];
   return (
@@ -20,7 +32,7 @@ export function YouScreen() {
       style={{ flex: 1, backgroundColor: colors.bg }}
       contentContainerStyle={{ paddingTop: insets.top + 12, paddingHorizontal: 20, paddingBottom: insets.bottom + 110 }}
     >
-      <Meta left="Profile" right="Local only" />
+      <Meta left="Profile" right="Local log" />
       <H1>You</H1>
       <View style={styles.hero}>
         <View style={[styles.avatar, { backgroundColor: colors.accent }]}>
@@ -28,14 +40,14 @@ export function YouScreen() {
         </View>
         <View>
           <Text style={[styles.name, { color: colors.ink }]}>{USER_NAME}</Text>
-          <Text style={[styles.sub, { color: colors.muted }]}>No account · nothing uploaded</Text>
+          <Text style={[styles.sub, { color: colors.muted }]}>No account · pose stays local</Text>
         </View>
       </View>
       <View style={styles.stats}>
         {[
-          { v: '12', l: 'Sessions', acc: true },
-          { v: '48', l: 'Sets', acc: false },
-          { v: '2.9 cm', l: 'Avg drift', acc: false },
+          { v: String(stats.sets), l: 'Sets', acc: true },
+          { v: String(stats.reps), l: 'Reps', acc: false },
+          { v: String(stats.faults), l: 'Faults', acc: false },
         ].map((s) => (
           <View key={s.l} style={[styles.st, { backgroundColor: colors.card2, borderColor: colors.hair }]}>
             <Text style={[styles.stv, { color: s.acc ? colors.accent : colors.ink }]}>{s.v}</Text>

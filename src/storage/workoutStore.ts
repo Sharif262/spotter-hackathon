@@ -137,13 +137,15 @@ export async function startSession(lift: string, exercise: ExerciseId, equipment
 /** Immediate local session id so the first live frames are not dropped. */
 export function beginSession(lift: string, exercise: ExerciseId, equipment: EquipmentKind) {
   const startedAt = Date.now();
+  // Timestamp ids never collide with leftover AUTOINCREMENT rows (1, 2, 3…) after a restart.
+  if (mem.nextId < 1_000_000_000_000) mem.nextId = Date.now();
   const id = mem.nextId++;
   mem.sessions.set(id, { id, startedAt, endedAt: null, exercise, equipment, lift, reps: 0, faultCount: 0 });
   ensureMem(id);
   void sql().then((database) => {
     if (!database) return;
     return database.runAsync(
-      'INSERT OR IGNORE INTO sessions (id, started_at, exercise, equipment, lift, reps) VALUES (?, ?, ?, ?, ?, 0)',
+      'INSERT INTO sessions (id, started_at, exercise, equipment, lift, reps) VALUES (?, ?, ?, ?, ?, 0)',
       id,
       startedAt,
       exercise,
@@ -313,7 +315,10 @@ export async function recentSessions(limit = 12): Promise<SessionRow[]> {
   }));
   const database = await sql();
   if (!database) {
-    return local.sort((a, b) => b.startedAt - a.startedAt).slice(0, limit);
+    return local
+      .filter((s) => s.endedAt != null)
+      .sort((a, b) => b.startedAt - a.startedAt)
+      .slice(0, limit);
   }
   const rows = await database.getAllAsync<{
     id: number; started_at: number; ended_at: number | null; exercise: ExerciseId;
@@ -330,5 +335,8 @@ export async function recentSessions(limit = 12): Promise<SessionRow[]> {
     faultCount: Number(row.fault_count ?? 0),
   }]));
   for (const s of local) byId.set(s.id, s);
-  return [...byId.values()].sort((a, b) => b.startedAt - a.startedAt).slice(0, limit);
+  return [...byId.values()]
+    .filter((s) => s.endedAt != null)
+    .sort((a, b) => b.startedAt - a.startedAt)
+    .slice(0, limit);
 }

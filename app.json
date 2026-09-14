@@ -16,7 +16,11 @@
       "supportsTablet": false,
       "bundleIdentifier": "com.spotter.app",
       "infoPlist": {
-        "NSCameraUsageDescription": "Spotter uses the live camera to track pose, count reps, and flag form breaks. Nothing is uploaded."
+        "NSCameraUsageDescription": "Spotter uses the live camera to track pose, count reps, and flag form breaks. Nothing is uploaded.",
+        "NSAppTransportSecurity": {
+          "NSAllowsLocalNetworking": true,
+          "NSAllowsArbitraryLoads": true
+        }
       }
     },
     "android": {

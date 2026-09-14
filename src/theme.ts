@@ -46,7 +46,3 @@ export type Theme = typeof light;
 export type ThemeName = 'light' | 'dark';
 
 export const cyan = '#22D3EE';
-export const camBg = '#0A0C0D';
-export const warningGold = '#FFC46B';
-export const driftBad = '#FF6A5A';
-export const lockGreen = '#34D399';

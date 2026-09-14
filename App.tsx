@@ -7,7 +7,6 @@ import { TabBar } from './src/components/TabBar';
 import { Toast } from './src/components/Toast';
 import { HomeScreen } from './src/screens/HomeScreen';
 import { SessionsScreen } from './src/screens/SessionsScreen';
-import { LearnScreen } from './src/screens/LearnScreen';
 import { YouScreen } from './src/screens/YouScreen';
 import { PickLiftScreen } from './src/screens/PickLiftScreen';
 import { FrameScreen } from './src/screens/FrameScreen';
@@ -22,7 +21,6 @@ function Root() {
       <StatusBar style={themeName === 'dark' || screen === 'frame' || screen === 'rec' ? 'light' : 'dark'} />
       {screen === 'home' && <HomeScreen />}
       {screen === 'sessions' && <SessionsScreen />}
-      {screen === 'learn' && <LearnScreen />}
       {screen === 'you' && <YouScreen />}
       {screen === 'pick' && <PickLiftScreen />}
       {screen === 'frame' && <FrameScreen />}
