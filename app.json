@@ -7,6 +7,7 @@
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "automatic",
     "scheme": "spotter",
+    "newArchEnabled": true,
     "splash": {
       "image": "./assets/splash-icon.png",
       "resizeMode": "contain",
@@ -40,6 +41,21 @@
       "favicon": "./assets/favicon.png"
     },
     "plugins": [
+      "expo-dev-client",
+      [
+        "react-native-vision-camera",
+        {
+          "cameraPermissionText": "Spotter uses the live camera to track pose, count reps, and flag form breaks. Nothing is uploaded.",
+          "enableMicrophonePermission": false,
+          "enableFrameProcessors": true
+        }
+      ],
+      [
+        "react-native-mediapipe-posedetection",
+        {
+          "assetsPaths": ["./assets/models/"]
+        }
+      ],
       [
         "expo-camera",
         {

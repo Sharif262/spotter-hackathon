@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { KinematicEngine, type TrackerSnapshot } from '../cv/engine';
+import { KinematicEngine } from '../cv/engine';
 import { liftToExercise, type EquipmentKind, type ExerciseId } from '../cv/exercises';
-import { liveLandmarks } from '../cv/poseModel';
+import type { PoseFeed } from '../cv/poseFeed';
 import * as store from '../storage/workoutStore';
 
 export type LiveHud = {
@@ -12,22 +12,41 @@ export type LiveHud = {
   warn: boolean;
   secs: number;
   landmarks: { x: number; y: number }[];
+  locked: boolean;
+  native: boolean;
 };
 
-export function useLiveTracker(lift: string, equipment: EquipmentKind, active: boolean) {
+const WAITING: LiveHud = {
+  reps: 0,
+  elbow: 0,
+  fsm: 'WAITING',
+  cue: null,
+  warn: false,
+  secs: 0,
+  landmarks: [],
+  locked: false,
+  native: false,
+};
+
+export function useLiveTracker(
+  lift: string,
+  equipment: EquipmentKind,
+  active: boolean,
+  pose: PoseFeed,
+) {
   const exercise: ExerciseId = liftToExercise(lift);
   const engineRef = useRef<KinematicEngine | null>(null);
   const sessionIdRef = useRef<number | null>(null);
-  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const writesRef = useRef<Promise<unknown>[]>([]);
-  const t0 = useRef(0);
   const sampleN = useRef(0);
+  const accMs = useRef(0);
+  const lastTick = useRef<number | null>(null);
+  const poseRef = useRef(pose);
+  poseRef.current = pose;
 
-  const [hud, setHud] = useState<LiveHud>({
-    reps: 0, elbow: 0, fsm: 'IDLE', cue: null, warn: false, secs: 0, landmarks: [],
-  });
+  const [hud, setHud] = useState<LiveHud>(WAITING);
 
-  const persist = useCallback((snap: TrackerSnapshot) => {
+  const persist = useCallback((snap: ReturnType<KinematicEngine['process']>) => {
     const id = sessionIdRef.current;
     if (id == null) return;
     sampleN.current += 1;
@@ -42,45 +61,59 @@ export function useLiveTracker(lift: string, equipment: EquipmentKind, active: b
   }, []);
 
   useEffect(() => {
-    if (!active) return;
+    if (!active) {
+      lastTick.current = null;
+      setHud((h) => ({ ...WAITING, native: poseRef.current.native, locked: poseRef.current.locked }));
+      return;
+    }
     engineRef.current = new KinematicEngine(exercise, equipment);
-    t0.current = Date.now();
     sampleN.current = 0;
-    sessionIdRef.current = null;
+    accMs.current = 0;
+    lastTick.current = null;
     writesRef.current = [];
-
-    const tick = () => {
-      const elapsed = Date.now() - t0.current;
-      const lms = liveLandmarks(exercise, elapsed);
-      const snap = engineRef.current!.process(lms, Date.now());
-      setHud({
-        reps: snap.reps,
-        elbow: Math.round((snap.leftAngle + snap.rightAngle) / 2),
-        fsm: snap.leftState,
-        cue: snap.liveCue,
-        warn: !!snap.liveFault,
-        secs: Math.floor(elapsed / 1000),
-        landmarks: lms.filter((p) => (p.visibility ?? 0) > 0).map((p) => ({ x: p.x, y: p.y })),
-      });
-      persist(snap);
-    };
-
-    intervalRef.current = setInterval(tick, 33);
     sessionIdRef.current = store.beginSession(lift, exercise, equipment);
-
+    setHud({ ...WAITING, native: poseRef.current.native });
     return () => {
-      if (intervalRef.current) {
-        clearInterval(intervalRef.current);
-        intervalRef.current = null;
-      }
+      lastTick.current = null;
     };
-  }, [active, equipment, exercise, lift, persist]);
+  }, [active, equipment, exercise, lift]);
+
+  useEffect(() => {
+    if (!active || !engineRef.current) return;
+    const now = Date.now();
+    const drive = active && pose.locked && pose.landmarks.length >= 25;
+    if (!drive) {
+      lastTick.current = null;
+      setHud((h) => ({
+        ...h,
+        fsm: 'WAITING',
+        cue: null,
+        warn: false,
+        landmarks: [],
+        locked: false,
+        native: pose.native,
+      }));
+      return;
+    }
+    if (lastTick.current != null) accMs.current += now - lastTick.current;
+    lastTick.current = now;
+    const snap = engineRef.current.process(pose.landmarks, now);
+    persist(snap);
+    setHud({
+      reps: snap.reps,
+      elbow: Math.round((snap.leftAngle + snap.rightAngle) / 2),
+      fsm: snap.leftState,
+      cue: snap.liveCue,
+      warn: !!snap.liveFault,
+      secs: Math.floor(accMs.current / 1000),
+      landmarks: pose.landmarks.filter((p) => (p.visibility ?? 0) > 0.5).map((p) => ({ x: p.x, y: p.y })),
+      locked: true,
+      native: pose.native,
+    });
+  }, [active, persist, pose.landmarks, pose.locked, pose.native]);
 
   const stop = useCallback(async () => {
-    if (intervalRef.current) {
-      clearInterval(intervalRef.current);
-      intervalRef.current = null;
-    }
+    lastTick.current = null;
     const id = sessionIdRef.current;
     const reps = engineRef.current?.reps ?? 0;
     await Promise.all(writesRef.current);

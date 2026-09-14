@@ -63,6 +63,7 @@ export function PrimaryButton({
   glass,
   style,
   trailing,
+  disabled,
 }: {
   label: string;
   onPress: () => void;
@@ -71,6 +72,7 @@ export function PrimaryButton({
   glass?: boolean;
   style?: StyleProp<ViewStyle>;
   trailing?: React.ReactNode;
+  disabled?: boolean;
 }) {
   const { colors } = useApp();
   const bg = danger ? colors.red : ghost ? 'transparent' : glass ? 'rgba(255,255,255,0.12)' : colors.accent;
@@ -78,13 +80,15 @@ export function PrimaryButton({
   return (
     <Pressable
       onPress={onPress}
+      disabled={disabled}
       style={({ pressed }) => [
         styles.bt,
         {
           backgroundColor: bg,
           borderWidth: ghost || glass ? 1.5 : 0,
           borderColor: ghost ? colors.hair : 'rgba(255,255,255,0.26)',
-          transform: [{ scale: pressed ? 0.975 : 1 }],
+          transform: [{ scale: pressed && !disabled ? 0.975 : 1 }],
+          opacity: disabled ? 0.45 : 1,
         },
         style,
       ]}

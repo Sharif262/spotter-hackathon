@@ -7,6 +7,7 @@
     "expo": "~57.0.22",
     "expo-camera": "~57.0.5",
     "expo-constants": "~57.0.18",
+    "expo-dev-client": "~57.0.19",
     "expo-file-system": "~57.0.7",
     "expo-haptics": "~57.0.3",
     "expo-keep-awake": "~57.0.2",
@@ -16,9 +17,12 @@
     "react": "19.2.3",
     "react-dom": "19.2.3",
     "react-native": "0.86.3",
+    "react-native-mediapipe-posedetection": "^0.4.0",
     "react-native-safe-area-context": "~5.7.0",
     "react-native-svg": "15.15.4",
-    "react-native-web": "^0.21.2"
+    "react-native-vision-camera": "4.7.3",
+    "react-native-web": "^0.21.2",
+    "react-native-worklets-core": "^1.6.3"
   },
   "devDependencies": {
     "@types/react": "~19.2.2",
@@ -26,10 +30,12 @@
   },
   "scripts": {
     "start": "expo start",
+    "start:dev": "expo start --dev-client",
     "android": "expo start --android",
     "ios": "expo start --ios",
     "web": "expo start --web",
-    "backend": "npm start --prefix backend"
+    "backend": "npm start --prefix backend",
+    "verify:pose": "npx tsx scripts/verify-pose-gate.ts"
   },
   "private": true
 }

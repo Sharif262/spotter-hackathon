@@ -239,10 +239,10 @@ export function coachFromLog(input: {
 }
 
 export const EMPTY_REPORT: CoachReport = {
-  wentWell: 'Finish a live-tracked set and Spotter will read the local log.',
+  wentWell: 'No tracked reps — stay in frame next set.',
   diagnosis: 'No kinematic session stored yet',
-  why: 'Joint angles, FSM state, and form faults are written to SQLite (and CSV) on device, then Gemini reads that file.',
-  cue: 'Pick a lift, lock the frame, then run a live set.',
+  why: 'Spotter only writes a coach log after a real body is locked and at least one rep commits.',
+  cue: 'Lock elbows and hips in the side view, then run a live set.',
   muscles: MUSCLE.bicep_curl.map((m) => ({ ...m, hot: false })),
   reps: 0,
   avgElbow: 0,
@@ -260,6 +260,7 @@ const coachCache = new Map<number, CoachReport>();
 export async function loadLocalCoach(sessionId: number): Promise<{ report: CoachReport; log: CoachLog | null }> {
   const session = await store.getSession(sessionId);
   if (!session) return { report: EMPTY_REPORT, log: null };
+  if (session.reps < 1) return { report: EMPTY_REPORT, log: null };
   const [faults, reps, samples] = await Promise.all([
     store.getFaults(sessionId),
     store.getReps(sessionId),
@@ -278,7 +279,7 @@ export async function loadCoach(
   if (cached?.source === 'gemini') return cached;
   const { report, log } = await loadLocalCoach(sessionId);
   onLocal?.(report);
-  if (!log) return report;
+  if (!log || report.reps < 1) return report;
   try {
     const fb = await fetchGeminiFeedback(log);
     const merged = applyGemini(report, fb);

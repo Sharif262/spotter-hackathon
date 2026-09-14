@@ -85,7 +85,10 @@ export type PosePhase = {
   wristDrift: number;
 };
 
-/** Time-based live pose for an exercise, with form breaks on later reps. */
+/**
+ * Test-only kinematic skeleton. Do not feed this into the live tracker.
+ * Live reps come from camera MediaPipe landmarks after a body lock.
+ */
 export function poseAt(exercise: ExerciseId, elapsedMs: number): { pose: PosePhase; overhead: boolean } {
   const cycle = 2200;
   const n = Math.floor(elapsedMs / cycle);
