@@ -1,0 +1,130 @@
+import { useKeepAwake } from 'expo-keep-awake';
+import { LinearGradient } from 'expo-linear-gradient';
+import React, { useCallback, useEffect, useState } from 'react';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import Svg, { Circle, Line } from 'react-native-svg';
+import { LiveCamera } from '../components/LiveCamera';
+import { useApp } from '../context';
+import { useLiveTracker } from '../hooks/useLiveTracker';
+
+export function RecordScreen() {
+  useKeepAwake();
+  const { go, curLift, equipment, haptic, setLastSessionId } = useApp();
+  const insets = useSafeAreaInsets();
+  const [phase, setPhase] = useState<'cd' | 'live'>('cd');
+  const [count, setCount] = useState(3);
+  const { hud, stop } = useLiveTracker(curLift, equipment, phase === 'live');
+
+  useEffect(() => {
+    setPhase('cd');
+    setCount(3);
+    haptic();
+    let k = 3;
+    const id = setInterval(() => {
+      k -= 1;
+      if (k <= 0) {
+        clearInterval(id);
+        setCount(0);
+        haptic();
+        setTimeout(() => setPhase('live'), 400);
+      } else {
+        setCount(k);
+        haptic();
+      }
+    }, 900);
+    return () => clearInterval(id);
+  }, [haptic]);
+
+  const finish = useCallback(async () => {
+    haptic();
+    const id = await stop();
+    setLastSessionId(id);
+    go('result');
+  }, [go, haptic, setLastSessionId, stop]);
+
+  const mm = String(Math.floor(hud.secs / 60)).padStart(2, '0');
+  const ss = String(hud.secs % 60).padStart(2, '0');
+  const banner = hud.cue ?? (phase === 'live' ? `${hud.fsm.replace(/_/g, ' ')} · live` : 'Get set');
+
+  return (
+    <View style={styles.root}>
+      <LiveCamera />
+
+      <View style={StyleSheet.absoluteFill} pointerEvents="none">
+        <Svg width="100%" height="100%" viewBox="0 0 100 100" preserveAspectRatio="none">
+          {hud.landmarks.map((p, i) => (
+            <Circle key={i} cx={p.x * 100} cy={p.y * 100} r={1.1} fill="#22D3EE" opacity={0.9} />
+          ))}
+          <Line x1="50" y1="0" x2="50" y2="100" stroke="rgba(255,255,255,0.22)" strokeWidth={0.4} strokeDasharray="1 2" />
+        </Svg>
+      </View>
+
+      <View style={[styles.top, { paddingTop: insets.top + 10 }]}>
+        <View style={styles.pill}>
+          <View style={styles.liveDot} />
+          <Text style={styles.pillTx}>LIVE {mm}:{ss}</Text>
+        </View>
+        <View style={styles.pill}><Text style={styles.pillTx}>{curLift}</Text></View>
+      </View>
+
+      <View style={[styles.banner, hud.warn ? styles.bannerWarn : null, { top: insets.top + 58 }]}>
+        <Text style={styles.bannerTx}>{phase === 'cd' && count > 0 ? 'Find the start position' : banner}</Text>
+      </View>
+
+      {phase === 'live' ? (
+        <>
+          <View style={[styles.hudRep, { top: insets.top + 126 }]} pointerEvents="none">
+            <Text style={styles.rk}>Rep</Text>
+            <Text style={[styles.rv, hud.warn && { color: '#FFC46B' }]}>{hud.reps}</Text>
+            <Text style={styles.rt}>{hud.fsm}</Text>
+          </View>
+          <View style={styles.hudDrift} pointerEvents="none">
+            <Text style={styles.dk}>Elbow</Text>
+            <Text style={[styles.dv, hud.warn && { color: '#FFC46B' }]}>
+              {hud.elbow}<Text style={styles.du}>°</Text>
+            </Text>
+          </View>
+        </>
+      ) : null}
+
+      {phase === 'cd' ? (
+        <View style={styles.cd}>
+          <Text style={styles.cdn}>{count <= 0 ? 'GO' : count}</Text>
+          <Text style={styles.cdlbl}>{count <= 0 ? 'Track live' : 'Find the start position'}</Text>
+        </View>
+      ) : null}
+
+      <LinearGradient colors={['transparent', 'rgba(6,8,9,0.9)']} style={[styles.dock, { paddingBottom: insets.bottom + 22 }]}>
+        <Pressable onPress={finish} style={styles.danger}>
+          <Text style={styles.dangerTx}>Finish set</Text>
+        </Pressable>
+      </LinearGradient>
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  root: { flex: 1, backgroundColor: '#0A0C0D' },
+  top: { position: 'absolute', left: 16, right: 16, flexDirection: 'row', justifyContent: 'space-between', zIndex: 6 },
+  pill: { backgroundColor: 'rgba(10,12,13,0.68)', paddingHorizontal: 14, paddingVertical: 9, borderRadius: 999, borderWidth: 1, borderColor: 'rgba(255,255,255,0.15)', flexDirection: 'row', alignItems: 'center', gap: 7 },
+  liveDot: { width: 7, height: 7, borderRadius: 4, backgroundColor: '#34D399' },
+  pillTx: { color: '#fff', fontSize: 12.5, fontWeight: '600' },
+  banner: { position: 'absolute', left: 16, right: 16, padding: 13, borderRadius: 15, backgroundColor: 'rgba(0,136,176,0.94)', alignItems: 'center', zIndex: 6 },
+  bannerWarn: { backgroundColor: 'rgba(214,132,36,0.96)' },
+  bannerTx: { color: '#fff', fontSize: 15, fontWeight: '700', letterSpacing: 0.7, textTransform: 'uppercase' },
+  hudRep: { position: 'absolute', left: 0, right: 0, alignItems: 'center', zIndex: 5 },
+  rk: { fontSize: 12, fontWeight: '700', letterSpacing: 0.7, color: 'rgba(255,255,255,0.5)', textTransform: 'uppercase' },
+  rv: { fontSize: 86, fontWeight: '700', color: '#fff', lineHeight: 86, letterSpacing: -3 },
+  rt: { fontSize: 13, fontWeight: '700', letterSpacing: 2.6, color: 'rgba(255,255,255,0.45)', textTransform: 'uppercase' },
+  hudDrift: { position: 'absolute', right: 18, top: '53%', alignItems: 'flex-end', zIndex: 5 },
+  dk: { fontSize: 10, fontWeight: '700', letterSpacing: 0.7, color: 'rgba(255,255,255,0.45)', textTransform: 'uppercase' },
+  dv: { fontSize: 38, fontWeight: '700', color: '#31B4DA', lineHeight: 40 },
+  du: { fontSize: 14, opacity: 0.6 },
+  cd: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(6,8,9,0.62)', alignItems: 'center', justifyContent: 'center', zIndex: 10 },
+  cdn: { fontSize: 86, fontWeight: '700', color: '#fff' },
+  cdlbl: { marginTop: 8, fontSize: 11, fontWeight: '700', letterSpacing: 0.7, color: 'rgba(255,255,255,0.6)', textTransform: 'uppercase' },
+  dock: { position: 'absolute', left: 0, right: 0, bottom: 0, paddingHorizontal: 20, paddingTop: 20 },
+  danger: { height: 52, borderRadius: 15, backgroundColor: '#EF4444', alignItems: 'center', justifyContent: 'center' },
+  dangerTx: { color: '#fff', fontSize: 16, fontWeight: '700' },
+});
