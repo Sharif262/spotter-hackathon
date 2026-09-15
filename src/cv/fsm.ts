@@ -1,75 +1,66 @@
 export type FsmState = 'IDLE' | 'CONCENTRIC' | 'PEAK' | 'ECCENTRIC';
 
-export type FsmConfig = {
-  startThreshold: number;
-  peakThreshold: number;
-  concentricDecreases: boolean;
-  holdFrames?: number;
-};
-
-export class RepFsm {
+/**
+ * One rep = visit the far end of the ROM, then return.
+ * Rising alone does not count; dropping alone does not count.
+ */
+export class EasyRepCounter {
+  private lo = Infinity;
+  private hi = -Infinity;
+  private started = false;
+  private reachedFar = false;
+  private lastRepAt = -1e9;
   state: FsmState = 'IDLE';
-  private hold = 0;
-  private pending: FsmState | null = null;
-  private armed = false;
-  readonly holdFrames: number;
 
-  constructor(private cfg: FsmConfig) {
-    this.holdFrames = cfg.holdFrames ?? 3;
+  constructor(
+    private minRom: number,
+    private refractoryMs = 500,
+  ) {}
+
+  setMinRom(n: number) {
+    this.minRom = n;
   }
 
   reset() {
+    this.lo = Infinity;
+    this.hi = -Infinity;
+    this.started = false;
+    this.reachedFar = false;
     this.state = 'IDLE';
-    this.hold = 0;
-    this.pending = null;
-    this.armed = false;
   }
 
-  private commit(next: FsmState): boolean {
-    if (this.pending !== next) {
-      this.pending = next;
-      this.hold = 1;
+  step(value: number, t: number): boolean {
+    if (!Number.isFinite(value)) return false;
+    this.lo = Math.min(this.lo, value);
+    this.hi = Math.max(this.hi, value);
+    const span = this.hi - this.lo;
+    if (span < this.minRom) {
+      this.state = 'IDLE';
       return false;
     }
-    this.hold += 1;
-    if (this.hold < this.holdFrames) return false;
-    this.state = next;
-    this.pending = null;
-    this.hold = 0;
-    return true;
-  }
 
-  atStart(angle: number) {
-    return this.cfg.concentricDecreases
-      ? angle >= this.cfg.startThreshold
-      : angle <= this.cfg.startThreshold;
-  }
+    const far = value >= this.lo + span * 0.72;
+    const near = value <= this.lo + span * 0.28;
 
-  atPeak(angle: number) {
-    return this.cfg.concentricDecreases
-      ? angle <= this.cfg.peakThreshold
-      : angle >= this.cfg.peakThreshold;
-  }
-
-  step(angle: number): 'rep' | null {
-    switch (this.state) {
-      case 'IDLE':
-        if (this.atStart(angle)) this.armed = true;
-        if (this.armed && !this.atStart(angle)) this.commit('CONCENTRIC');
-        break;
-      case 'CONCENTRIC':
-        if (this.atPeak(angle)) this.commit('PEAK');
-        break;
-      case 'PEAK':
-        if (!this.atPeak(angle)) this.commit('ECCENTRIC');
-        break;
-      case 'ECCENTRIC':
-        if (this.atStart(angle) && this.commit('IDLE')) {
-          this.armed = true;
-          return 'rep';
-        }
-        break;
+    if (near) {
+      this.started = true;
+      if (this.reachedFar && t - this.lastRepAt >= this.refractoryMs) {
+        this.reachedFar = false;
+        this.lastRepAt = t;
+        this.state = 'IDLE';
+        return true;
+      }
+      this.state = this.reachedFar ? 'ECCENTRIC' : 'IDLE';
+      return false;
     }
-    return null;
+
+    if (this.started && far) {
+      this.reachedFar = true;
+      this.state = 'PEAK';
+      return false;
+    }
+
+    this.state = this.reachedFar ? 'ECCENTRIC' : 'CONCENTRIC';
+    return false;
   }
 }

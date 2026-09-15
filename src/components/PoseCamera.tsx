@@ -19,6 +19,10 @@ export function PoseCamera({ active = true, onPose }: Props) {
     return <LiveCamera />;
   }
 
-  const { NativePoseCamera } = require('./NativePoseCamera') as typeof import('./NativePoseCamera');
-  return <NativePoseCamera active={active} onPose={onPose} />;
+  try {
+    const { NativePoseCamera } = require('./NativePoseCamera') as typeof import('./NativePoseCamera');
+    return <NativePoseCamera active={active} onPose={onPose} />;
+  } catch {
+    return <LiveCamera />;
+  }
 }

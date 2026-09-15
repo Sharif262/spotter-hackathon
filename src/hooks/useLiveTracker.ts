@@ -63,7 +63,7 @@ export function useLiveTracker(
   useEffect(() => {
     if (!active) {
       lastTick.current = null;
-      setHud((h) => ({ ...WAITING, native: poseRef.current.native, locked: poseRef.current.locked }));
+      setHud((h) => ({ ...WAITING, native: poseRef.current.native, locked: poseRef.current.locked, reps: h.reps }));
       return;
     }
     engineRef.current = new KinematicEngine(exercise, equipment);
@@ -72,7 +72,7 @@ export function useLiveTracker(
     lastTick.current = null;
     writesRef.current = [];
     sessionIdRef.current = store.beginSession(lift, exercise, equipment);
-    setHud({ ...WAITING, native: poseRef.current.native });
+    setHud({ ...WAITING, native: poseRef.current.native, locked: poseRef.current.locked });
     return () => {
       lastTick.current = null;
     };
@@ -81,23 +81,22 @@ export function useLiveTracker(
   useEffect(() => {
     if (!active || !engineRef.current) return;
     const now = Date.now();
-    const drive = active && pose.locked && pose.landmarks.length >= 25;
-    if (!drive) {
+    const body = pose.landmarks.length >= 25 || pose.overlay.length >= 25;
+    if (!body) {
       lastTick.current = null;
       setHud((h) => ({
         ...h,
         fsm: 'WAITING',
         cue: null,
         warn: false,
-        landmarks: [],
-        locked: false,
         native: pose.native,
+        locked: pose.locked,
       }));
       return;
     }
     if (lastTick.current != null) accMs.current += now - lastTick.current;
     lastTick.current = now;
-    const snap = engineRef.current.process(pose.landmarks, now);
+    const snap = engineRef.current.process(pose.landmarks, now, pose.overlay);
     persist(snap);
     setHud({
       reps: snap.reps,
@@ -106,11 +105,11 @@ export function useLiveTracker(
       cue: snap.liveCue,
       warn: !!snap.liveFault,
       secs: Math.floor(accMs.current / 1000),
-      landmarks: pose.landmarks.filter((p) => (p.visibility ?? 0) > 0.5).map((p) => ({ x: p.x, y: p.y })),
-      locked: true,
+      landmarks: pose.overlay.length ? pose.overlay : pose.landmarks.map((p) => ({ x: p.x, y: p.y })),
+      locked: pose.locked,
       native: pose.native,
     });
-  }, [active, persist, pose.landmarks, pose.locked, pose.native]);
+  }, [active, persist, pose]);
 
   const stop = useCallback(async () => {
     lastTick.current = null;

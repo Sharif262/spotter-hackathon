@@ -3,11 +3,12 @@ import { LinearGradient } from 'expo-linear-gradient';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import Svg, { Circle, Line } from 'react-native-svg';
 import { PoseCamera } from '../components/PoseCamera';
+import { PoseOverlay } from '../components/PoseOverlay';
 import { useApp } from '../context';
 import { useLiveTracker } from '../hooks/useLiveTracker';
-import { NO_POSE, type PoseFeed } from '../cv/poseFeed';
+import { isNativePoseRuntime } from '../cv/poseCapability';
+import { NATIVE_WAITING, NO_POSE, type PoseFeed } from '../cv/poseFeed';
 
 export function RecordScreen() {
   useKeepAwake();
@@ -15,12 +16,20 @@ export function RecordScreen() {
   const insets = useSafeAreaInsets();
   const [phase, setPhase] = useState<'cd' | 'live'>('cd');
   const [count, setCount] = useState(3);
-  const [pose, setPose] = useState<PoseFeed>(NO_POSE);
+  const [pose, setPose] = useState<PoseFeed>(() => (
+    isNativePoseRuntime() ? NATIVE_WAITING : NO_POSE
+  ));
   const onPose = useCallback((next: PoseFeed) => setPose(next), []);
   const { hud, stop } = useLiveTracker(curLift, equipment, phase === 'live', pose);
   const finishing = useRef(false);
   const lockedRef = useRef(false);
   lockedRef.current = pose.locked;
+  const lastRep = useRef(0);
+
+  useEffect(() => {
+    if (hud.reps > lastRep.current) haptic();
+    lastRep.current = hud.reps;
+  }, [haptic, hud.reps]);
 
   useEffect(() => {
     if (!pose.native) return;
@@ -28,27 +37,19 @@ export function RecordScreen() {
     setCount(3);
     haptic();
     let k = 3;
-    let goTimer: ReturnType<typeof setTimeout> | null = null;
     const id = setInterval(() => {
-      if (!lockedRef.current) return;
       k -= 1;
       if (k <= 0) {
         clearInterval(id);
         setCount(0);
         haptic();
-        goTimer = setTimeout(() => {
-          if (lockedRef.current) setPhase('live');
-          else setCount(3);
-        }, 400);
+        setPhase('live');
       } else {
         setCount(k);
         haptic();
       }
-    }, 900);
-    return () => {
-      clearInterval(id);
-      if (goTimer) clearTimeout(goTimer);
-    };
+    }, 700);
+    return () => clearInterval(id);
   }, [haptic, pose.native]);
 
   const finish = useCallback(async () => {
@@ -82,15 +83,7 @@ export function RecordScreen() {
   return (
     <View style={styles.root}>
       <PoseCamera onPose={onPose} />
-
-      <View style={StyleSheet.absoluteFill} pointerEvents="none">
-        <Svg width="100%" height="100%" viewBox="0 0 100 100" preserveAspectRatio="none">
-          {hud.landmarks.map((p, i) => (
-            <Circle key={i} cx={p.x * 100} cy={p.y * 100} r={1.1} fill="#22D3EE" opacity={0.9} />
-          ))}
-          <Line x1="50" y1="0" x2="50" y2="100" stroke="rgba(255,255,255,0.22)" strokeWidth={0.4} strokeDasharray="1 2" />
-        </Svg>
-      </View>
+      <PoseOverlay points={pose.overlay.length ? pose.overlay : pose.landmarks} lift={curLift} />
 
       <View style={[styles.top, { paddingTop: insets.top + 10 }]}>
         <View style={styles.pill}>
@@ -129,9 +122,9 @@ export function RecordScreen() {
             </>
           ) : (
             <>
-              <Text style={styles.cdn}>{!pose.locked ? '—' : count <= 0 ? 'GO' : count}</Text>
+              <Text style={styles.cdn}>{count <= 0 ? 'GO' : count}</Text>
               <Text style={styles.cdlbl}>
-                {!pose.locked ? 'Can’t see you — countdown paused' : count <= 0 ? 'Track live' : 'Find the start position'}
+                {count <= 0 ? 'Track live' : 'Get set — reps start after GO'}
               </Text>
             </>
           )}
@@ -167,7 +160,7 @@ const styles = StyleSheet.create({
   dk: { fontSize: 10, fontWeight: '700', letterSpacing: 0.7, color: 'rgba(255,255,255,0.45)', textTransform: 'uppercase' },
   dv: { fontSize: 38, fontWeight: '700', color: '#31B4DA', lineHeight: 40 },
   du: { fontSize: 14, opacity: 0.6 },
-  cd: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(6,8,9,0.62)', alignItems: 'center', justifyContent: 'center', zIndex: 10 },
+  cd: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(6,8,9,0.28)', alignItems: 'center', justifyContent: 'center', zIndex: 10 },
   cdn: { fontSize: 86, fontWeight: '700', color: '#fff' },
   cdNeed: { fontSize: 22, fontWeight: '700', color: '#fff', textAlign: 'center', paddingHorizontal: 28 },
   cdlbl: { marginTop: 8, fontSize: 11, fontWeight: '700', letterSpacing: 0.7, color: 'rgba(255,255,255,0.6)', textTransform: 'uppercase', textAlign: 'center', paddingHorizontal: 24 },

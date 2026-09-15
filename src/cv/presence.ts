@@ -11,18 +11,24 @@ const CRITICAL = [
 
 const WRISTS = [LM.leftWrist, LM.rightWrist] as const;
 
-const ACQUIRE_FRAMES = 8;
+const ACQUIRE_FRAMES = 5;
 const DROP_FRAMES = 5;
+const MIN_VIS = 0.25;
 
 function vis(lms: Landmark[], i: number) {
-  return lms[i]?.visibility ?? 0;
+  const p = lms[i];
+  if (!p) return 0;
+  if (typeof p.visibility === 'number' && p.visibility > 0) return p.visibility;
+  // iOS Pose Landmarker often omits visibility/presence; in-frame coords still mean a joint.
+  if (p.x > 0.02 && p.x < 0.98 && p.y > 0.02 && p.y < 0.98) return 1;
+  return 0;
 }
 
-/** True when one body is in a usable side-view crop. */
+/** True when one body is in a usable crop (front or side). */
 export function frameLooksLocked(lms: Landmark[]): boolean {
   if (lms.length < 25) return false;
-  if (CRITICAL.some((i) => vis(lms, i) < 0.5)) return false;
-  if (WRISTS.filter((i) => vis(lms, i) >= 0.5).length < 1) return false;
+  if (CRITICAL.some((i) => vis(lms, i) < MIN_VIS)) return false;
+  if (WRISTS.filter((i) => vis(lms, i) >= MIN_VIS).length < 1) return false;
 
   const lSh = lms[LM.leftShoulder];
   const rSh = lms[LM.rightShoulder];
@@ -79,7 +85,7 @@ export function mapPoseLandmarks(raw: { x: number; y: number; z: number; visibil
       x: p.x,
       y: p.y,
       z: p.z,
-      visibility: p.visibility ?? p.presence ?? 0,
+      visibility: p.visibility ?? p.presence ?? (p.x > 0.02 && p.x < 0.98 && p.y > 0.02 && p.y < 0.98 ? 1 : 0),
     };
   }
   return out;

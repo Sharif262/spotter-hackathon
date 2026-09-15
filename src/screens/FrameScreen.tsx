@@ -4,13 +4,17 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useApp } from '../context';
 import { PoseCamera } from '../components/PoseCamera';
+import { PoseOverlay } from '../components/PoseOverlay';
 import { NavBar, PrimaryButton } from '../components/Ui';
-import { NO_POSE, type PoseFeed } from '../cv/poseFeed';
+import { isNativePoseRuntime } from '../cv/poseCapability';
+import { NATIVE_WAITING, NO_POSE, type PoseFeed } from '../cv/poseFeed';
 
 export function FrameScreen() {
-  const { go } = useApp();
+  const { go, curLift } = useApp();
   const insets = useSafeAreaInsets();
-  const [pose, setPose] = useState<PoseFeed>(NO_POSE);
+  const [pose, setPose] = useState<PoseFeed>(() => (
+    isNativePoseRuntime() ? NATIVE_WAITING : NO_POSE
+  ));
   const onPose = useCallback((next: PoseFeed) => setPose(next), []);
 
   const status = useMemo(() => {
@@ -27,23 +31,33 @@ export function FrameScreen() {
       return {
         pill: 'Locked',
         title: 'Body locked',
-        sub: 'Elbows and hips are in frame. Keep this side view for the set.',
+        sub: 'Elbows and hips are in frame. Keep this distance for the set.',
         cta: 'Start live set',
         locked: true,
       };
     }
+    if (pose.landmarks.length >= 25) {
+      return {
+        pill: 'Hold still',
+        title: 'Seeing you — locking on',
+        sub: 'Stay in the box with elbows and hips visible. Start turns on once the lock holds.',
+        cta: 'Waiting for a lock',
+        locked: false,
+      };
+    }
     return {
       pill: 'Can’t see you',
-      title: 'Hold still — elbows and hips in frame',
-      sub: 'Stand in the box with a side view. Start stays off until Spotter locks onto one person.',
+      title: 'Step into the box',
+      sub: 'Face the phone or stand side-on so elbows and hips are visible. Start stays off until Spotter locks onto one person.',
       cta: 'Waiting for a person',
       locked: false,
     };
-  }, [pose.locked, pose.native]);
+  }, [pose.landmarks.length, pose.locked, pose.native]);
 
   return (
     <View style={styles.root}>
       <PoseCamera onPose={onPose} />
+      <PoseOverlay points={pose.overlay.length ? pose.overlay : pose.landmarks} lift={curLift} />
       <View style={styles.fg} pointerEvents="none">
         {(['tl', 'tr', 'bl', 'br'] as const).map((c) => (
           <View key={c} style={[styles.fgc, styles[c]]} />

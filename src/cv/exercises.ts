@@ -1,4 +1,4 @@
-import { LM, angleDeg, get, type Landmark, type Side } from './math';
+import { LM, angleDeg, get, mag, sub, type Landmark, type Side } from './math';
 
 export type ExerciseId = 'bicep_curl' | 'shoulder_press' | 'tricep_extension';
 export type EquipmentKind = 'db' | 'bb';
@@ -48,8 +48,9 @@ function wristElbowOffset(lms: Landmark[], side: 'left' | 'right') {
   const el = get(lms, side === 'left' ? LM.leftElbow : LM.rightElbow);
   const wr = get(lms, side === 'left' ? LM.leftWrist : LM.rightWrist);
   const sh = get(lms, side === 'left' ? LM.leftShoulder : LM.rightShoulder);
-  const arm = Math.hypot(el.x - sh.x, el.y - sh.y) || 1;
-  return Math.abs(wr.x - el.x) / arm;
+  const arm = mag(sub(el, sh)) || 1;
+  // Lateral drift in the horizontal plane so "stack wrists over elbows" uses the wrist, not the bone length.
+  return Math.hypot(wr.x - el.x, wr.z - el.z) / arm;
 }
 
 export const SPECS: Record<ExerciseId, ExerciseSpec> = {
@@ -137,9 +138,35 @@ export const SPECS: Record<ExerciseId, ExerciseSpec> = {
   },
 };
 
+export function verticalAxis(lms: Landmark[]): 'x' | 'y' {
+  const lSh = get(lms, LM.leftShoulder);
+  const rSh = get(lms, LM.rightShoulder);
+  return Math.abs(rSh.y - lSh.y) > Math.abs(rSh.x - lSh.x) * 1.25 ? 'x' : 'y';
+}
+
+function axisVal(p: { x: number; y: number }, axis: 'x' | 'y') {
+  return axis === 'x' ? p.x : p.y;
+}
+
 export function primaryAngle(lms: Landmark[], side: 'left' | 'right', spec: ExerciseSpec): number {
   if (spec.primaryJoint === 'elbow') return elbow(lms, side);
   return elbow(lms, side);
+}
+
+/** Wrist travel along the body's up-axis, plus elbow ROM. Works for landscape buffers and portrait views. */
+export function repSignal(id: ExerciseId, lms: Landmark[]): { wrist: number; elbow: number; wristRom: number; elbowRom: number } {
+  const axis = verticalAxis(lms);
+  const wrist = (
+    axisVal(get(lms, LM.leftWrist), axis) + axisVal(get(lms, LM.rightWrist), axis)
+  ) / 2;
+  const elbowMid = (elbow(lms, 'left') + elbow(lms, 'right')) / 2;
+  if (id === 'tricep_extension') {
+    return { wrist, elbow: elbowMid, wristRom: 0.035, elbowRom: 14 };
+  }
+  if (id === 'shoulder_press') {
+    return { wrist, elbow: elbowMid, wristRom: 0.035, elbowRom: 14 };
+  }
+  return { wrist, elbow: elbowMid, wristRom: 0.035, elbowRom: 14 };
 }
 
 export function liftToExercise(lift: string): ExerciseId {

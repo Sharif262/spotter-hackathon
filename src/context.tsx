@@ -12,7 +12,7 @@ import { dark, light, type Theme, type ThemeName } from './theme';
 import type { EquipmentKind } from './cv/exercises';
 import type { ScreenId, TabId } from './types';
 
-const TABS: TabId[] = ['home', 'sessions', 'you'];
+const TABS: TabId[] = ['home', 'sessions', 'you', 'settings'];
 const THEME_KEY = 'spotter-theme';
 
 type AppContextValue = {

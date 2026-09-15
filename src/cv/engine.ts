@@ -1,6 +1,7 @@
-import { SPECS, primaryAngle, type EquipmentKind, type ExerciseId, type FaultEvent } from './exercises';
-import { RepFsm, type FsmState } from './fsm';
+import { SPECS, primaryAngle, repSignal, type EquipmentKind, type ExerciseId, type FaultEvent } from './exercises';
+import { EasyRepCounter, type FsmState } from './fsm';
 import { LowPass, type Landmark, type Side } from './math';
+import type { OverlayPoint } from './poseFeed';
 
 export type SampleRow = {
   t: number;
@@ -30,59 +31,67 @@ export type TrackerSnapshot = {
   faultRep: number;
 };
 
+function motionPose(lms: Landmark[], overlay?: OverlayPoint[]): Landmark[] {
+  if (!overlay || overlay.length < 25) return lms;
+  return lms.map((p, i) => {
+    const o = overlay[i];
+    if (!o) return p;
+    return { x: o.x, y: o.y, z: p.z, visibility: o.visibility ?? p.visibility };
+  });
+}
+
 export class KinematicEngine {
-  private left: RepFsm;
-  private right: RepFsm;
-  private lFilter = new LowPass(0.35);
-  private rFilter = new LowPass(0.35);
+  private repsCounter = new EasyRepCounter(0.035);
+  private sigFilter = new LowPass(0.55);
+  private lFilter = new LowPass(0.5);
+  private rFilter = new LowPass(0.5);
   private lastFaultAt = new Map<string, number>();
+  private lastLog = 0;
   reps = 0;
 
   constructor(
     readonly exercise: ExerciseId,
     readonly equipment: EquipmentKind,
-  ) {
-    const spec = SPECS[exercise];
-    const cfg = {
-      startThreshold: spec.startThreshold,
-      peakThreshold: spec.peakThreshold,
-      concentricDecreases: spec.concentricDecreases,
-      holdFrames: 3,
-    };
-    this.left = new RepFsm(cfg);
-    this.right = new RepFsm(cfg);
-  }
+  ) {}
 
   reset() {
-    this.left.reset();
-    this.right.reset();
+    this.repsCounter.reset();
+    this.sigFilter.reset();
     this.lFilter.reset();
     this.rFilter.reset();
     this.reps = 0;
     this.lastFaultAt.clear();
   }
 
-  process(lms: Landmark[], t = Date.now()): TrackerSnapshot {
+  process(lms: Landmark[], t = Date.now(), overlay?: OverlayPoint[]): TrackerSnapshot {
     const spec = SPECS[this.exercise];
     const lRaw = primaryAngle(lms, 'left', spec);
     const rRaw = primaryAngle(lms, 'right', spec);
     const lAng = this.lFilter.next(lRaw);
     const rAng = this.rFilter.next(rRaw);
 
+    const motion = motionPose(lms, overlay);
+    const sig = repSignal(this.exercise, motion);
+    const value = this.exercise === 'tricep_extension' ? sig.elbow : sig.wrist;
+    const minRom = this.exercise === 'tricep_extension' ? sig.elbowRom : sig.wristRom;
+    this.repsCounter.setMinRom(minRom);
     const committedNs: number[] = [];
-    if (this.equipment === 'db') {
-      if (this.left.step(lAng) === 'rep') { this.reps += 1; committedNs.push(this.reps); }
-      if (this.right.step(rAng) === 'rep') { this.reps += 1; committedNs.push(this.reps); }
-    } else {
-      const mid = (lAng + rAng) / 2;
-      if (this.left.step(mid) === 'rep') { this.reps += 1; committedNs.push(this.reps); }
-      this.right.step(mid);
+    if (this.repsCounter.step(this.sigFilter.next(value), t)) {
+      this.reps += 1;
+      committedNs.push(this.reps);
+      console.log('rep', this.reps, this.exercise, { value, elbow: sig.elbow, wrist: sig.wrist });
     }
 
-    const moving = this.left.state === 'CONCENTRIC' || this.right.state === 'CONCENTRIC'
-      || this.left.state === 'PEAK' || this.right.state === 'PEAK'
-      || this.left.state === 'ECCENTRIC' || this.right.state === 'ECCENTRIC';
+    if (t - this.lastLog > 1500) {
+      this.lastLog = t;
+      console.log('signal', this.exercise, {
+        value: +value.toFixed(3),
+        reps: this.reps,
+        state: this.repsCounter.state,
+      });
+    }
 
+    const moving = this.repsCounter.state !== 'IDLE';
     const newFaults: FaultEvent[] = [];
     if (moving) {
       for (const side of ['left', 'right'] as const) {
@@ -95,7 +104,7 @@ export class KinematicEngine {
           }
         }
       }
-      if (this.equipment === 'bb' && Math.abs(lAng - rAng) > 15) {
+      if (this.equipment === 'bb' && Math.abs(lAng - rAng) > 18) {
         const key = 'bar_uneven';
         const last = this.lastFaultAt.get(key) ?? 0;
         if (t - last > 700) {
@@ -106,7 +115,7 @@ export class KinematicEngine {
             severity: 'warn',
             side: 'both',
             angle: Math.abs(lAng - rAng),
-            threshold: 15,
+            threshold: 18,
             joint: 'left-right elbow',
           });
         }
@@ -114,12 +123,13 @@ export class KinematicEngine {
     }
 
     const live = newFaults[0] ?? null;
-    const inFlight = moving ? this.reps + 1 : this.reps;
+    const state = this.repsCounter.state;
+    const inFlight = moving ? Math.max(this.reps, 1) : this.reps;
     const sample: SampleRow = {
       t,
       exercise: this.exercise,
       side: this.equipment === 'bb' ? 'both' : 'left',
-      fsm: this.left.state,
+      fsm: state,
       elbowDeg: Math.round(((lAng + rAng) / 2) * 10) / 10,
       faultCode: live?.code ?? '',
       cue: live?.cue ?? '',
@@ -131,11 +141,11 @@ export class KinematicEngine {
       reps: this.reps,
       leftAngle: lAng,
       rightAngle: rAng,
-      leftState: this.left.state,
-      rightState: this.right.state,
+      leftState: state,
+      rightState: state,
       liveCue: live?.cue ?? null,
       liveFault: live,
-      barUneven: this.equipment === 'bb' && Math.abs(lAng - rAng) > 15,
+      barUneven: this.equipment === 'bb' && Math.abs(lAng - rAng) > 18,
       newRep: committedNs.length > 0,
       committedNs,
       newFaults,

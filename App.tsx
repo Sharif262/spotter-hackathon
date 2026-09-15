@@ -8,6 +8,7 @@ import { Toast } from './src/components/Toast';
 import { HomeScreen } from './src/screens/HomeScreen';
 import { SessionsScreen } from './src/screens/SessionsScreen';
 import { YouScreen } from './src/screens/YouScreen';
+import { SettingsScreen } from './src/screens/SettingsScreen';
 import { PickLiftScreen } from './src/screens/PickLiftScreen';
 import { FrameScreen } from './src/screens/FrameScreen';
 import { RecordScreen } from './src/screens/RecordScreen';
@@ -22,6 +23,7 @@ function Root() {
       {screen === 'home' && <HomeScreen />}
       {screen === 'sessions' && <SessionsScreen />}
       {screen === 'you' && <YouScreen />}
+      {screen === 'settings' && <SettingsScreen />}
       {screen === 'pick' && <PickLiftScreen />}
       {screen === 'frame' && <FrameScreen />}
       {screen === 'rec' && <RecordScreen />}

@@ -48,6 +48,12 @@ export const Person = ({ size = 20, color = '#64748B' }: Ico) => (
 export const CameraIco = ({ size = 22, color = '#fff' }: Ico) => (
   <S size={size} color={color}><Path d="M23 19a2 2 0 01-2 2H3a2 2 0 01-2-2V8a2 2 0 012-2h4l2-3h6l2 3h4a2 2 0 012 2z" /><Circle cx="12" cy="13" r="4" /></S>
 );
+export const Gear = ({ size = 20, color = '#64748B' }: Ico) => (
+  <S size={size} color={color}>
+    <Circle cx="12" cy="12" r="3" />
+    <Path d="M12 2v3M12 19v3M4.2 6.2l2.1 2.1M17.7 15.7l2.1 2.1M2 12h3M19 12h3M4.2 17.8l2.1-2.1M17.7 8.3l2.1-2.1" />
+  </S>
+);
 
 export function LiftIcon({ name, size = 22, color = '#475569' }: { name: string; size?: number; color?: string }) {
   const n = name.toLowerCase();

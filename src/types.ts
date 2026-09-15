@@ -2,13 +2,14 @@ export type ScreenId =
   | 'home'
   | 'sessions'
   | 'you'
+  | 'settings'
   | 'pick'
   | 'frame'
   | 'rec'
   | 'result'
   | 'fix';
 
-export type TabId = 'home' | 'sessions' | 'you';
+export type TabId = 'home' | 'sessions' | 'you' | 'settings';
 
 export type SetStatus = 'good' | 'warn' | 'bad';
 
